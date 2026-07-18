@@ -1,13 +1,12 @@
 const nodemailer = require('nodemailer');
-const twilio = require('twilio');
 const fs = require('fs');
 const path = require('path');
 
 const smtpUser = process.env.SMTP_USER;
 const smtpPass = process.env.SMTP_PASS;
-const twilioSid = process.env.TWILIO_ACCOUNT_SID;
-const twilioToken = process.env.TWILIO_AUTH_TOKEN;
-const twilioPhone = process.env.TWILIO_PHONE_NUMBER;
+const vonageKey = process.env.VONAGE_API_KEY;
+const vonageSecret = process.env.VONAGE_API_SECRET;
+const vonageBrand = process.env.VONAGE_BRAND_NAME || 'VonageSMS';
 const recipientEmail = process.env.RECIPIENT_EMAIL || 'sayantanpal20061974@gmail.com';
 const recipientPhone = process.env.RECIPIENT_PHONE || '+916290359386';
 
@@ -45,26 +44,42 @@ async function main() {
     console.warn('SMTP credentials missing. Skipping email.');
   }
 
-  // 2. Send SMS Notification
-  if (twilioSid && twilioToken && twilioPhone) {
+  // 2. Send SMS Notification (Vonage)
+  if (vonageKey && vonageSecret) {
     try {
-      const client = twilio(twilioSid, twilioToken);
       let formattedPhone = recipientPhone.trim();
-      if (!formattedPhone.startsWith('+')) {
-        formattedPhone = `+91${formattedPhone}`;
+      formattedPhone = formattedPhone.replace(/[-\s+]/g, '');
+      if (!formattedPhone.startsWith('91') && formattedPhone.length === 10) {
+        formattedPhone = `91${formattedPhone}`;
       }
 
-      const message = await client.messages.create({
-        body: 'Periodic 5-Minute Notification: Everything is running smoothly!',
-        from: twilioPhone,
-        to: formattedPhone
+      const response = await fetch('https://rest.nexmo.com/sms/json', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: new URLSearchParams({
+          api_key: vonageKey,
+          api_secret: vonageSecret,
+          to: formattedPhone,
+          from: vonageBrand,
+          text: 'Periodic 5-Minute Notification: Everything is running smoothly!'
+        })
       });
-      console.log(`SMS successfully sent to ${formattedPhone}. SID: ${message.sid}`);
+
+      const data = await response.json();
+
+      if (data.messages && data.messages[0] && data.messages[0].status === '0') {
+        console.log(`SMS successfully sent to ${formattedPhone} via Vonage. Message ID: ${data.messages[0]['message-id']}`);
+      } else {
+        const errMsg = data.messages && data.messages[0] ? data.messages[0]['error-text'] : 'Unknown error';
+        console.error(`Vonage SMS delivery failed to ${formattedPhone}: ${errMsg}`);
+      }
     } catch (err) {
-      console.error('Error sending SMS:', err.message);
+      console.error('Error sending SMS via Vonage:', err.message);
     }
   } else {
-    console.warn('Twilio credentials missing. Skipping SMS.');
+    console.warn('Vonage credentials missing. Skipping SMS.');
   }
 }
 

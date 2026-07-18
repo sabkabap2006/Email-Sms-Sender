@@ -3,7 +3,6 @@ import cors from 'cors'
 import dotenv from 'dotenv'
 import mongoose from 'mongoose'
 import nodemailer from 'nodemailer'
-import twilio from 'twilio'
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
@@ -49,49 +48,68 @@ if (process.env.SMTP_USER && process.env.SMTP_PASS) {
   })
 }
 
-// Initialize Twilio client if credentials are set
-let twilioClient = null
-const hasTwilioCreds = (
-  process.env.TWILIO_ACCOUNT_SID && 
-  process.env.TWILIO_ACCOUNT_SID !== 'your_twilio_account_sid_here' && 
-  process.env.TWILIO_AUTH_TOKEN && 
-  process.env.TWILIO_AUTH_TOKEN !== 'your_twilio_auth_token_here'
+// Log status of Vonage SMS credentials on start
+const hasVonageCreds = (
+  process.env.VONAGE_API_KEY && 
+  process.env.VONAGE_VONAGE_API_KEY !== 'your_vonage_api_key' && 
+  process.env.VONAGE_API_SECRET && 
+  process.env.VONAGE_API_SECRET !== 'your_vonage_api_secret'
 )
 
-if (hasTwilioCreds) {
-  try {
-    twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
-    console.log('Twilio SMS client initialized successfully')
-  } catch (err) {
-    console.error('Error initializing Twilio client:', err.message)
-  }
+if (hasVonageCreds) {
+  console.log('Vonage SMS configurations detected')
 } else {
-  console.log('Twilio credentials not configured. SMS will run in SIMULATION mode.')
+  console.log('Vonage credentials not fully configured. SMS will run in SIMULATION mode.')
 }
 
-// Helper to send SMS (formats phone and dispatches/simulates)
+// Helper to send SMS via Vonage HTTP API (formats phone and dispatches/simulates)
 const sendSMS = async (phone, body) => {
   let formattedPhone = phone.trim()
-  if (!formattedPhone.startsWith('+')) {
-    // Default to Indian country code +91 as local timezone is IST (+05:30)
-    formattedPhone = `+91${formattedPhone}`
+  // Vonage E.164 phone formatting (numeric digits without +, e.g. 919876543210 for India)
+  formattedPhone = formattedPhone.replace(/[-\s+]/g, '')
+  if (!formattedPhone.startsWith('91') && formattedPhone.length === 10) {
+    formattedPhone = `91${formattedPhone}`
   }
 
-  if (twilioClient) {
+  const liveCreds = (
+    process.env.VONAGE_API_KEY && 
+    process.env.VONAGE_API_KEY !== 'your_vonage_api_key' && 
+    process.env.VONAGE_API_SECRET && 
+    process.env.VONAGE_API_SECRET !== 'your_vonage_api_secret'
+  )
+
+  if (liveCreds) {
     try {
-      const message = await twilioClient.messages.create({
-        body: body,
-        from: process.env.TWILIO_PHONE_NUMBER,
-        to: formattedPhone
+      const response = await fetch('https://rest.nexmo.com/sms/json', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: new URLSearchParams({
+          api_key: process.env.VONAGE_API_KEY,
+          api_secret: process.env.VONAGE_API_SECRET,
+          to: formattedPhone,
+          from: process.env.VONAGE_BRAND_NAME || 'VonageSMS',
+          text: body
+        })
       })
-      console.log(`SMS successfully sent to ${formattedPhone}. SID: ${message.sid}`)
-      return { success: true, sid: message.sid }
+
+      const data = await response.json()
+
+      if (data.messages && data.messages[0] && data.messages[0].status === '0') {
+        console.log(`SMS successfully sent to ${formattedPhone} via Vonage. Message ID: ${data.messages[0]['message-id']}`)
+        return { success: true, messageId: data.messages[0]['message-id'] }
+      } else {
+        const errMsg = data.messages && data.messages[0] ? data.messages[0]['error-text'] : 'Unknown error'
+        console.error(`Vonage SMS delivery failed to ${formattedPhone}: ${errMsg}`)
+        return { success: false, error: errMsg }
+      }
     } catch (err) {
-      console.error(`Failed to send SMS to ${formattedPhone}:`, err.message)
+      console.error(`Failed to send SMS to ${formattedPhone} via Vonage:`, err.message)
       return { success: false, error: err.message }
     }
   } else {
-    console.log(`[SMS SIMULATION] To: ${formattedPhone} | Message: ${body}`)
+    console.log(`[VONAGE SMS SIMULATION] To: ${formattedPhone} | Message: ${body}`)
     return { success: true, simulated: true }
   }
 }
@@ -201,7 +219,7 @@ app.post('/register', async (req, res) => {
       })
     }
 
-    // Send Welcome SMS
+    // Send Welcome SMS (Vonage)
     const smsBody = `Hi ${newUser.name}, thank you for registering with us! We have set up your profile.`
     sendSMS(newUser.phone, smsBody)
 

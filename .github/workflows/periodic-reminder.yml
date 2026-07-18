@@ -18,15 +18,15 @@ jobs:
           node-version: '22'
 
       - name: Install dependencies
-        run: npm install nodemailer twilio
+        run: npm install nodemailer
 
       - name: Send Periodic Messages
         run: node .github/scripts/send-periodic.js
         env:
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
-          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
-          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
-          TWILIO_PHONE_NUMBER: ${{ secrets.TWILIO_PHONE_NUMBER }}
+          VONAGE_API_KEY: ${{ secrets.VONAGE_API_KEY }}
+          VONAGE_API_SECRET: ${{ secrets.VONAGE_API_SECRET }}
+          VONAGE_BRAND_NAME: ${{ secrets.VONAGE_BRAND_NAME }}
           RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
           RECIPIENT_PHONE: ${{ secrets.RECIPIENT_PHONE }}
