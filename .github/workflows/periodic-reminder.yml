@@ -25,8 +25,8 @@ jobs:
         env:
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
-          VONAGE_API_KEY: ${{ secrets.VONAGE_API_KEY }}
-          VONAGE_API_SECRET: ${{ secrets.VONAGE_API_SECRET }}
-          VONAGE_BRAND_NAME: ${{ secrets.VONAGE_BRAND_NAME }}
+          MSG91_AUTH_KEY: ${{ secrets.MSG91_AUTH_KEY }}
+          MSG91_TEMPLATE_ID: ${{ secrets.MSG91_TEMPLATE_ID }}
+          MSG91_SENDER_ID: ${{ secrets.MSG91_SENDER_ID }}
           RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
           RECIPIENT_PHONE: ${{ secrets.RECIPIENT_PHONE }}

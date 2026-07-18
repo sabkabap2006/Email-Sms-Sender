@@ -23,9 +23,9 @@ PORT=5001
 MONGODB_URI=mongodb://localhost:27017/registration_db
 SMTP_USER=your_gmail_address
 SMTP_PASS=your_gmail_app_password
-TWILIO_ACCOUNT_SID=your_twilio_sid
-TWILIO_AUTH_TOKEN=your_twilio_token
-TWILIO_PHONE_NUMBER=your_twilio_phone_number
+MSG91_AUTH_KEY=your_msg91_auth_key
+MSG91_TEMPLATE_ID=your_msg91_template_id
+MSG91_SENDER_ID=your_msg91_sender_id
 ```
 
 ### 3. Launch the Backend

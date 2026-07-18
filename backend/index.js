@@ -48,68 +48,72 @@ if (process.env.SMTP_USER && process.env.SMTP_PASS) {
   })
 }
 
-// Log status of Vonage SMS credentials on start
-const hasVonageCreds = (
-  process.env.VONAGE_API_KEY && 
-  process.env.VONAGE_VONAGE_API_KEY !== 'your_vonage_api_key' && 
-  process.env.VONAGE_API_SECRET && 
-  process.env.VONAGE_API_SECRET !== 'your_vonage_api_secret'
+// Log status of MSG91 SMS credentials on start
+const hasMsg91Creds = (
+  process.env.MSG91_AUTH_KEY && 
+  process.env.MSG91_AUTH_KEY !== 'your_msg91_auth_key'
 )
 
-if (hasVonageCreds) {
-  console.log('Vonage SMS configurations detected')
+if (hasMsg91Creds) {
+  console.log('MSG91 SMS configurations detected')
 } else {
-  console.log('Vonage credentials not fully configured. SMS will run in SIMULATION mode.')
+  console.log('MSG91 credentials not fully configured. SMS will run in SIMULATION mode.')
 }
 
-// Helper to send SMS via Vonage HTTP API (formats phone and dispatches/simulates)
-const sendSMS = async (phone, body) => {
+// Helper to send SMS via MSG91 Flow API (formats phone and dispatches/simulates)
+const sendSMS = async (phone, body, variables = {}) => {
   let formattedPhone = phone.trim()
-  // Vonage E.164 phone formatting (numeric digits without +, e.g. 919876543210 for India)
+  // MSG91 expects number in international format without leading + (e.g. 919876543210)
   formattedPhone = formattedPhone.replace(/[-\s+]/g, '')
   if (!formattedPhone.startsWith('91') && formattedPhone.length === 10) {
     formattedPhone = `91${formattedPhone}`
   }
 
   const liveCreds = (
-    process.env.VONAGE_API_KEY && 
-    process.env.VONAGE_API_KEY !== 'your_vonage_api_key' && 
-    process.env.VONAGE_API_SECRET && 
-    process.env.VONAGE_API_SECRET !== 'your_vonage_api_secret'
+    process.env.MSG91_AUTH_KEY && 
+    process.env.MSG91_AUTH_KEY !== 'your_msg91_auth_key'
   )
 
   if (liveCreds) {
     try {
-      const response = await fetch('https://rest.nexmo.com/sms/json', {
+      const templateId = process.env.MSG91_TEMPLATE_ID
+      const senderId = process.env.MSG91_SENDER_ID || 'MSGIND'
+
+      const response = await fetch('https://control.msg91.com/api/v5/flow/', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/x-www-form-urlencoded'
+          'authkey': process.env.MSG91_AUTH_KEY,
+          'Content-Type': 'application/json'
         },
-        body: new URLSearchParams({
-          api_key: process.env.VONAGE_API_KEY,
-          api_secret: process.env.VONAGE_API_SECRET,
-          to: formattedPhone,
-          from: process.env.VONAGE_BRAND_NAME || 'VonageSMS',
-          text: body
+        body: JSON.stringify({
+          template_id: templateId,
+          sender: senderId,
+          recipients: [
+            {
+              mobiles: formattedPhone,
+              // Bind custom variable parameters depending on DLT template setup
+              name: variables.name || 'User',
+              message: body
+            }
+          ]
         })
       })
 
       const data = await response.json()
 
-      if (data.messages && data.messages[0] && data.messages[0].status === '0') {
-        console.log(`SMS successfully sent to ${formattedPhone} via Vonage. Message ID: ${data.messages[0]['message-id']}`)
-        return { success: true, messageId: data.messages[0]['message-id'] }
+      if (data.type === 'success') {
+        console.log(`SMS successfully sent to ${formattedPhone} via MSG91. Request ID: ${data.request_id}`)
+        return { success: true, requestId: data.request_id }
       } else {
-        const errMsg = data.messages && data.messages[0] ? data.messages[0]['error-text'] : 'Unknown error'
-        console.error(`Vonage SMS delivery failed to ${formattedPhone}: ${errMsg}`)
-        return { success: false, error: errMsg }
+        console.error(`MSG91 SMS delivery failed to ${formattedPhone}: ${data.message || JSON.stringify(data)}`)
+        return { success: false, error: data.message || 'Unknown MSG91 error' }
       }
     } catch (err) {
-      console.error(`Failed to send SMS to ${formattedPhone} via Vonage:`, err.message)
+      console.error(`Failed to send SMS to ${formattedPhone} via MSG91:`, err.message)
       return { success: false, error: err.message }
     }
   } else {
-    console.log(`[VONAGE SMS SIMULATION] To: ${formattedPhone} | Message: ${body}`)
+    console.log(`[MSG91 SMS SIMULATION] To: ${formattedPhone} | Message: ${body}`)
     return { success: true, simulated: true }
   }
 }
@@ -219,9 +223,9 @@ app.post('/register', async (req, res) => {
       })
     }
 
-    // Send Welcome SMS (Vonage)
+    // Send Welcome SMS (MSG91)
     const smsBody = `Hi ${newUser.name}, thank you for registering with us! We have set up your profile.`
-    sendSMS(newUser.phone, smsBody)
+    sendSMS(newUser.phone, smsBody, { name: newUser.name })
 
     res.status(201).json({
       success: true,
@@ -361,7 +365,7 @@ app.post('/send-sms', async (req, res) => {
     }
 
     console.log(`Broadcasting SMS to ${users.length} users...`)
-    const smsPromises = users.map(user => sendSMS(user.phone, message))
+    const smsPromises = users.map(user => sendSMS(user.phone, message, { name: user.name }))
     const results = await Promise.all(smsPromises)
 
     const successCount = results.filter(r => r.success).length

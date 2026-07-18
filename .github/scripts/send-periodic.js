@@ -4,9 +4,9 @@ const path = require('path');
 
 const smtpUser = process.env.SMTP_USER;
 const smtpPass = process.env.SMTP_PASS;
-const vonageKey = process.env.VONAGE_API_KEY;
-const vonageSecret = process.env.VONAGE_API_SECRET;
-const vonageBrand = process.env.VONAGE_BRAND_NAME || 'VonageSMS';
+const msg91AuthKey = process.env.MSG91_AUTH_KEY;
+const msg91TemplateId = process.env.MSG91_TEMPLATE_ID;
+const msg91SenderId = process.env.MSG91_SENDER_ID || 'MSGIND';
 const recipientEmail = process.env.RECIPIENT_EMAIL || 'sayantanpal20061974@gmail.com';
 const recipientPhone = process.env.RECIPIENT_PHONE || '+916290359386';
 
@@ -44,8 +44,8 @@ async function main() {
     console.warn('SMTP credentials missing. Skipping email.');
   }
 
-  // 2. Send SMS Notification (Vonage)
-  if (vonageKey && vonageSecret) {
+  // 2. Send SMS Notification (MSG91)
+  if (msg91AuthKey && msg91TemplateId) {
     try {
       let formattedPhone = recipientPhone.trim();
       formattedPhone = formattedPhone.replace(/[-\s+]/g, '');
@@ -53,33 +53,37 @@ async function main() {
         formattedPhone = `91${formattedPhone}`;
       }
 
-      const response = await fetch('https://rest.nexmo.com/sms/json', {
+      const response = await fetch('https://control.msg91.com/api/v5/flow/', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/x-www-form-urlencoded'
+          'authkey': msg91AuthKey,
+          'Content-Type': 'application/json'
         },
-        body: new URLSearchParams({
-          api_key: vonageKey,
-          api_secret: vonageSecret,
-          to: formattedPhone,
-          from: vonageBrand,
-          text: 'Periodic 5-Minute Notification: Everything is running smoothly!'
+        body: JSON.stringify({
+          template_id: msg91TemplateId,
+          sender: msg91SenderId,
+          recipients: [
+            {
+              mobiles: formattedPhone,
+              name: 'Periodic Subscriber',
+              message: 'Periodic 5-Minute Notification: Everything is running smoothly!'
+            }
+          ]
         })
       });
 
       const data = await response.json();
 
-      if (data.messages && data.messages[0] && data.messages[0].status === '0') {
-        console.log(`SMS successfully sent to ${formattedPhone} via Vonage. Message ID: ${data.messages[0]['message-id']}`);
+      if (data.type === 'success') {
+        console.log(`SMS successfully sent to ${formattedPhone} via MSG91. Request ID: ${data.request_id}`);
       } else {
-        const errMsg = data.messages && data.messages[0] ? data.messages[0]['error-text'] : 'Unknown error';
-        console.error(`Vonage SMS delivery failed to ${formattedPhone}: ${errMsg}`);
+        console.error(`MSG91 SMS delivery failed to ${formattedPhone}: ${data.message || JSON.stringify(data)}`);
       }
     } catch (err) {
-      console.error('Error sending SMS via Vonage:', err.message);
+      console.error('Error sending SMS via MSG91:', err.message);
     }
   } else {
-    console.warn('Vonage credentials missing. Skipping SMS.');
+    console.warn('MSG91 credentials missing. Skipping SMS.');
   }
 }
 
