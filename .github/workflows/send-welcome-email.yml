@@ -1,0 +1,38 @@
+name: Send Welcome Email
+
+on:
+  workflow_dispatch:
+    inputs:
+      name:
+        description: 'Recipient Name'
+        required: true
+        default: 'Valued Customer'
+      email:
+        description: 'Recipient Email Address'
+        required: true
+
+jobs:
+  send-mail:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Render Email Template
+        run: |
+          # Create temporary file replacing placeholders
+          # We use sed to replace the placeholder {{name}} with the manual workflow input
+          sed "s/{{name}}/${{ github.event.inputs.name }}/g" .github/templates/welcome-email.html > .github/templates/rendered-email.html
+
+      - name: Send Mail via SMTP
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.SMTP_SERVER }}
+          server_port: ${{ secrets.SMTP_PORT }}
+          username: ${{ secrets.SMTP_USERNAME }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          subject: "Welcome to Our Service!"
+          to: ${{ github.event.inputs.email }}
+          from: "Our Team <noreply@example.com>"
+          html_body: file://.github/templates/rendered-email.html
+          secure: true
